@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Frogger v0.0.3</title>
+    <title>Frogger v0.0.4</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -54,6 +54,7 @@
             color: #f1c40f;
             border: 3px solid #f1c40f;
             min-width: 300px;
+            z-index: 10;
         }
         #startScreen h1 {
             font-size: 48px;
@@ -121,7 +122,7 @@
             <div>Level: <span id="level">1</span></div>
         </div>
         <canvas id="gameCanvas" width="800" height="600"></canvas>
-        <div id="version">v0.0.3</div>
+        <div id="version">v0.0.4</div>
         <div id="startScreen">
             <h1>🐸 FROGGER</h1>
             <p>Press SPACE to Start</p>
@@ -235,17 +236,20 @@
             }
         }
 
-        // Start game on spacebar
+        // Handle keyboard input
         document.addEventListener('keydown', e => {
-            if (e.code === 'Space' && !gameStarted) {
-                gameStarted = true;
-                gameRunning = true;
-                startScreen.style.display = 'none';
-                initLevel();
+            // Start game with SPACE
+            if (e.code === 'Space') {
+                if (!gameStarted) {
+                    gameStarted = true;
+                    gameRunning = true;
+                    startScreen.style.display = 'none';
+                    initLevel();
+                }
+                return; // Don't process movement on SPACE
             }
-            if (gameRunning && e.code === 'Space') {
-                moveCooldown = 0;
-            }
+            
+            // Movement controls (only when game is running)
             if (gameRunning) {
                 moveFrog(e.key);
             }
@@ -371,6 +375,7 @@
             gameOverEl.style.display = 'none';
             gameRunning = true;
             gameStarted = true;
+            startScreen.style.display = 'none';
             initLevel();
         }
 
@@ -444,7 +449,7 @@
 
         function loop() { update(); draw(); }
 
-        // Initialize
+        // Initialize (game waits at start screen)
         initLevel();
         loop();
     </script>
