@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Frogger - Qwen3.5 Test</title>
+    <title>Frogger v0.0.3</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -33,7 +33,16 @@
             font-size: 20px;
             font-weight: bold;
         }
-        #gameOver, #levelComplete {
+        #version {
+            position: absolute;
+            top: -50px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #f1c40f;
+            font-size: 18px;
+            font-weight: bold;
+        }
+        #startScreen, #gameOver, #levelComplete {
             position: absolute;
             top: 50%;
             left: 50%;
@@ -43,9 +52,23 @@
             border-radius: 15px;
             text-align: center;
             color: #f1c40f;
-            display: none;
             border: 3px solid #f1c40f;
             min-width: 300px;
+        }
+        #startScreen h1 {
+            font-size: 48px;
+            margin-bottom: 20px;
+            color: #2ecc71;
+            text-shadow: 3px 3px 6px rgba(0,0,0,0.8);
+        }
+        #startScreen p {
+            font-size: 24px;
+            margin-bottom: 30px;
+            animation: blink 1s infinite;
+        }
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
         }
         #gameOver h2, #levelComplete h2 { 
             font-size: 32px; 
@@ -53,6 +76,16 @@
         }
         #gameOver h2 { color: #e74c3c; }
         #levelComplete h2 { color: #2ecc71; }
+        #startScreen .controls {
+            font-size: 16px;
+            color: #ecf0f1;
+            margin-top: 20px;
+            line-height: 1.8;
+        }
+        #startScreen .controls span {
+            color: #f1c40f;
+            font-weight: bold;
+        }
         p { font-size: 20px; margin-bottom: 25px; }
         button {
             background: #f1c40f;
@@ -87,7 +120,18 @@
             <div>Lives: <span id="lives">3</span></div>
             <div>Level: <span id="level">1</span></div>
         </div>
-        <canvas id="gameCanvas" width="600" height="525"></canvas>
+        <div id="version">v0.0.3</div>
+        <canvas id="gameCanvas" width="800" height="600"></canvas>
+        <div id="startScreen">
+            <h1>🐸 FROGGER</h1>
+            <p>Press SPACE to Start</p>
+            <div class="controls">
+                <span>Arrow Keys</span> or <span>WASD</span> to move<br>
+                Reach the 🟩 green zones at the top<br>
+                Ride 🪵 logs and 🐢 turtles<br>
+                Avoid 🚗 cars and drowning!
+            </div>
+        </div>
         <div id="gameOver">
             <h2>GAME OVER</h2>
             <p>Final Score: <span id="finalScore">0</span></p>
@@ -113,22 +157,26 @@
         const levelCompleteEl = document.getElementById('levelComplete');
         const finalScoreEl = document.getElementById('finalScore');
         const nextLevelEl = document.getElementById('nextLevel');
+        const startScreen = document.getElementById('startScreen');
 
         const GRID = 75;
-        let gameRunning = true;
+        const COLS = Math.floor(canvas.width / GRID);
+        const ROWS = Math.floor(canvas.height / GRID);
+        
+        let gameRunning = false;
+        let gameStarted = false;
         let score = 0;
         let lives = 3;
         let level = 1;
-        let frog = { x: 3.5 * GRID, y: 6 * GRID, width: 50, height: 50 };
+        let frog = { x: Math.floor(COLS / 2) * GRID + GRID / 2, y: (ROWS - 1) * GRID + GRID / 2, width: 50, height: 50 };
         let logs = [];
         let turtles = [];
         let cars = [];
         let safeZones = [];
         let moveCooldown = 0;
-        let canMove = true;
 
         function initLevel() {
-            frog = { x: 3.5 * GRID, y: 6 * GRID, width: 50, height: 50 };
+            frog = { x: Math.floor(COLS / 2) * GRID + GRID / 2, y: (ROWS - 1) * GRID + GRID / 2, width: 50, height: 50 };
             logs = [];
             turtles = [];
             cars = [];
@@ -136,53 +184,71 @@
 
             const speedMult = 1 + (level - 1) * 0.2;
 
-            for (let i = 0; i < 8; i++) {
+            // Goal zones at top
+            for (let i = 0; i < COLS; i++) {
                 if (i % 2 === 0) {
                     safeZones.push({ x: i * GRID + 10, y: GRID * 0.5, width: GRID - 20, height: GRID - 10 });
                 }
             }
 
+            // Turtles row 1 (moving left)
             const turtleSpeed = 1.5 * speedMult;
-            for (let i = 0; i < 3; i++) {
+            for (let i = 0; i < 4; i++) {
                 turtles.push({
                     x: i * 2.5 * GRID, y: 1.5 * GRID, width: GRID * 2, height: GRID - 10,
                     speed: -turtleSpeed, submerged: false, submergeTimer: 0
                 });
             }
 
+            // Logs row 2 (moving right)
             const logSpeed = 2 * speedMult;
-            for (let i = 0; i < 3; i++) {
+            for (let i = 0; i < 4; i++) {
                 logs.push({
                     x: i * 2.5 * GRID, y: 2.5 * GRID, width: GRID * 2, height: GRID - 10, speed: logSpeed
                 });
             }
 
+            // Turtles row 3 (moving left, faster)
             const turtleSpeed2 = 2 * speedMult;
-            for (let i = 0; i < 4; i++) {
+            for (let i = 0; i < 5; i++) {
                 turtles.push({
                     x: i * 2 * GRID, y: 3.5 * GRID, width: GRID * 1.5, height: GRID - 10,
                     speed: -turtleSpeed2, submerged: false, submergeTimer: 0
                 });
             }
 
+            // Logs row 4 (moving left)
             const logSpeed2 = 2.5 * speedMult;
-            for (let i = 0; i < 2; i++) {
+            for (let i = 0; i < 3; i++) {
                 logs.push({
                     x: i * 3.5 * GRID, y: 4.5 * GRID, width: GRID * 3, height: GRID - 10, speed: -logSpeed2
                 });
             }
 
+            // Cars row 5
             const carSpeed = 3 * speedMult;
-            for (let i = 0; i < 3; i++) {
+            for (let i = 0; i < 4; i++) {
                 cars.push({
                     x: i * 2.5 * GRID, y: 5.5 * GRID, width: GRID * 1.5, height: GRID - 15,
-                    speed: carSpeed, color: ['#e74c3c', '#3498db', '#9b59b6'][i % 3]
+                    speed: carSpeed, color: ['#e74c3c', '#3498db', '#9b59b6', '#e67e22'][i % 4]
                 });
             }
         }
 
+        // Start game on spacebar
         document.addEventListener('keydown', e => {
-            if (canMove && gameRunning) moveFrog(e.key);
+            if (e.code === 'Space' && !gameStarted) {
+                gameStarted = true;
+                gameRunning = true;
+                startScreen.style.display = 'none';
+                initLevel();
+            }
+            if (gameRunning && e.code === 'Space') {
+                moveCooldown = 0; // Allow movement
+            }
+            if (gameRunning) {
+                moveFrog(e.key);
+            }
         });
 
         function moveFrog(key) {
@@ -250,10 +316,10 @@
                         }
                     }
                 }
-                if (!onObject && frog.y < 5 * GRID) loseLife();
+                if (!onObject && frog.y < (ROWS - 2) * GRID) loseLife();
             }
 
-            if (row === 5) {
+            if (row === ROWS - 2) {
                 for (let car of cars) {
                     if (rectOverlap(frogRect, car)) { loseLife(); break; }
                 }
@@ -274,7 +340,7 @@
             lives--;
             livesEl.textContent = lives;
             if (lives <= 0) endGame();
-            else { frog.x = 3.5 * GRID; frog.y = 6 * GRID; }
+            else { frog.x = Math.floor(COLS / 2) * GRID + GRID / 2; frog.y = (ROWS - 1) * GRID + GRID / 2; }
         }
 
         function levelComplete() {
@@ -304,6 +370,7 @@
             scoreEl.textContent = '0'; livesEl.textContent = '3'; levelEl.textContent = '1';
             gameOverEl.style.display = 'none';
             gameRunning = true;
+            gameStarted = true;
             initLevel();
         }
 
@@ -311,18 +378,23 @@
             ctx.fillStyle = '#000';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+            // Water
             ctx.fillStyle = '#3498db';
             ctx.fillRect(0, GRID, canvas.width, GRID * 4);
 
+            // Road
             ctx.fillStyle = '#34495e';
             ctx.fillRect(0, GRID * 5, canvas.width, GRID);
 
+            // Starting area
             ctx.fillStyle = '#27ae60';
-            ctx.fillRect(0, GRID * 6, canvas.width, GRID);
+            ctx.fillRect(0, GRID * 6, canvas.width, GRID * (ROWS - 6));
 
+            // Goal zones
             ctx.fillStyle = '#2ecc71';
             safeZones.forEach(zone => ctx.fillRect(zone.x, zone.y, zone.width, zone.height));
 
+            // Logs
             ctx.fillStyle = '#d35400';
             logs.forEach(log => {
                 ctx.fillRect(log.x, log.y, log.width, log.height);
@@ -331,6 +403,7 @@
                 ctx.fillStyle = '#d35400';
             });
 
+            // Turtles
             turtles.forEach(turtle => {
                 ctx.fillStyle = turtle.submerged ? 'rgba(52, 152, 219, 0.5)' : '#16a085';
                 ctx.fillRect(turtle.x, turtle.y, turtle.width, turtle.height);
@@ -342,6 +415,7 @@
                 }
             });
 
+            // Cars
             cars.forEach(car => {
                 ctx.fillStyle = car.color;
                 ctx.fillRect(car.x, car.y, car.width, car.height);
@@ -349,6 +423,7 @@
                 ctx.fillRect(car.x + 10, car.y + 5, car.width - 20, car.height / 3);
             });
 
+            // Frog
             ctx.fillStyle = '#2ecc71';
             ctx.beginPath();
             ctx.arc(frog.x, frog.y, frog.width / 2, 0, Math.PI * 2);
@@ -369,6 +444,7 @@
 
         function loop() { update(); draw(); }
 
+        // Initialize
         initLevel();
         loop();
     </script>
